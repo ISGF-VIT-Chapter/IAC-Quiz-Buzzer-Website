@@ -1,0 +1,63 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  role      String   @default("admin") // "admin" | "superadmin"
+  createdAt DateTime @default(now())
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  teamName  String
+  teamCode  String   @unique // e.g. "TEAM01" — login credential
+  password  String
+  score     Int      @default(0)
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  buzzes BuzzHistory[]
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  questionText  String
+  optionA       String?
+  optionB       String?
+  optionC       String?
+  optionD       String?
+  correctAnswer String
+  roundNumber   Int      @default(1)
+  orderIndex    Int      // display order within a round
+  points        Int      @default(10)
+  createdAt     DateTime @default(now())
+
+  buzzes BuzzHistory[]
+}
+
+model BuzzHistory {
+  id            String   @id @default(cuid())
+  teamId        String
+  questionId    String
+  buzzTimeMs    BigInt   // Unix timestamp in milliseconds for precision
+  wasFirst      Boolean  @default(false)
+  wasCorrect    Boolean?
+  pointsAwarded Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId, buzzTimeMs])
+}
