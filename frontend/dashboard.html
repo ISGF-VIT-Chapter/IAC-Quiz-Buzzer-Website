@@ -1093,7 +1093,7 @@
         document.getElementById('addTeamForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
-                await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams`, {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams`, {
                     method: 'POST', headers: authHeaders,
                     body: JSON.stringify({
                         teamName: document.getElementById('tName').value,
@@ -1101,10 +1101,19 @@
                         password: document.getElementById('tPass').value
                     })
                 });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    window.APP_CONFIG.showToast(err.message || 'Failed to register team', 'error');
+                    return;
+                }
+
                 document.getElementById('addTeamForm').reset();
                 window.APP_CONFIG.showToast('Team Registered!', 'success');
                 fetchTeams();
-            } catch (err) { }
+            } catch (err) {
+                window.APP_CONFIG.showToast('Failed to register team', 'error');
+            }
         });
 
         // Score submit (persisted)

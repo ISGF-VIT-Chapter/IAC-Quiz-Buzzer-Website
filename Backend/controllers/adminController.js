@@ -3,25 +3,41 @@ const prisma = require('../config/db');
 const redis = require('../config/redis');
 const bcrypt = require('bcryptjs');
 
+const isMissingScoreLogTableError = (error) => {
+    if (!error) return false;
+    // Prisma P2021 = table does not exist.
+    if (error.code === 'P2021') return true;
+    const msg = String(error.message || '').toLowerCase();
+    return msg.includes('scorelog') && msg.includes('does not exist');
+};
+
 const buildUniquePositiveQuestionCountMap = async (teamIds) => {
     if (!teamIds || teamIds.length === 0) return {};
 
-    const uniquePositiveLogs = await prisma.scoreLog.findMany({
-        where: {
-            teamId: { in: teamIds },
-            points: { gt: 0 }
-        },
-        select: {
-            teamId: true,
-            questionLabel: true
-        },
-        distinct: ['teamId', 'questionLabel']
-    });
+    try {
+        const uniquePositiveLogs = await prisma.scoreLog.findMany({
+            where: {
+                teamId: { in: teamIds },
+                points: { gt: 0 }
+            },
+            select: {
+                teamId: true,
+                questionLabel: true
+            },
+            distinct: ['teamId', 'questionLabel']
+        });
 
-    return uniquePositiveLogs.reduce((acc, log) => {
-        acc[log.teamId] = (acc[log.teamId] || 0) + 1;
-        return acc;
-    }, {});
+        return uniquePositiveLogs.reduce((acc, log) => {
+            acc[log.teamId] = (acc[log.teamId] || 0) + 1;
+            return acc;
+        }, {});
+    } catch (error) {
+        if (isMissingScoreLogTableError(error)) {
+            console.warn('ScoreLog table missing. uniqueQuestionsAnswered defaults to 0 until migration is applied.');
+            return {};
+        }
+        throw error;
+    }
 };
 
 // --- Team Management ---
@@ -71,23 +87,46 @@ exports.addScore = async (req, res) => {
             return res.status(400).json({ message: 'questionLabel cannot be empty' });
         }
 
-        const txResult = await prisma.$transaction(async (tx) => {
-            const createdLog = await tx.scoreLog.create({
-                data: {
-                    teamId,
-                    questionLabel: cleanedQuestionLabel,
-                    points: parsedPoints
-                },
-                include: {
-                    team: {
-                        select: {
-                            teamName: true
+        let txResult;
+        try {
+            txResult = await prisma.$transaction(async (tx) => {
+                const createdLog = await tx.scoreLog.create({
+                    data: {
+                        teamId,
+                        questionLabel: cleanedQuestionLabel,
+                        points: parsedPoints
+                    },
+                    include: {
+                        team: {
+                            select: {
+                                teamName: true
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            const updatedTeam = await tx.team.update({
+                const updatedTeam = await tx.team.update({
+                    where: { id: teamId },
+                    data: {
+                        score: {
+                            increment: parsedPoints
+                        }
+                    },
+                    select: {
+                        id: true,
+                        teamName: true,
+                        score: true,
+                        isActive: true
+                    }
+                });
+
+                return { createdLog, updatedTeam };
+            });
+        } catch (error) {
+            if (!isMissingScoreLogTableError(error)) throw error;
+
+            // Graceful fallback: preserve scoring even before ScoreLog migration exists.
+            const updatedTeam = await prisma.team.update({
                 where: { id: teamId },
                 data: {
                     score: {
@@ -102,8 +141,8 @@ exports.addScore = async (req, res) => {
                 }
             });
 
-            return { createdLog, updatedTeam };
-        });
+            txResult = { createdLog: null, updatedTeam };
+        }
 
         const uniqueCountsByTeamId = await buildUniquePositiveQuestionCountMap([teamId]);
         const uniqueQuestionsAnswered = uniqueCountsByTeamId[teamId] || 0;
@@ -149,6 +188,9 @@ exports.getScoreLogs = async (req, res) => {
 
         res.json({ scoreLogs });
     } catch (error) {
+        if (isMissingScoreLogTableError(error)) {
+            return res.json({ scoreLogs: [] });
+        }
         console.error('Get score logs error:', error);
         res.status(500).json({ message: 'Error fetching score logs' });
     }
