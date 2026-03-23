@@ -265,6 +265,41 @@ exports.getScoreLogs = async (req, res) => {
     }
 };
 
+exports.resetScores = async (req, res) => {
+    try {
+        const teams = await prisma.team.findMany({
+            select: { id: true }
+        });
+
+        await prisma.team.updateMany({
+            data: { score: 0 }
+        });
+
+        try {
+            await prisma.scoreLog.deleteMany({});
+        } catch (error) {
+            if (!isMissingScoreLogTableError(error)) throw error;
+        }
+
+        const pipeline = redis.pipeline();
+        pipeline.del(REDIS_SCORE_LOG_KEY);
+        teams.forEach((team) => {
+            pipeline.del(getTeamAnsweredSetKey(team.id));
+        });
+        await pipeline.exec();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('scoreReset', { at: new Date().toISOString() });
+        }
+
+        res.json({ message: 'Scores and question status reset successfully' });
+    } catch (error) {
+        console.error('Reset scores error:', error);
+        res.status(500).json({ message: 'Error resetting score data' });
+    }
+};
+
 exports.addTeam = async (req, res) => {
     try {
         const { teamName, teamCode, password } = req.body;

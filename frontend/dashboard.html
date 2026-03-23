@@ -666,7 +666,13 @@
             </div>
 
             <div class="table-container">
-                <h2>Score Log</h2>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+                    <h2 style="margin-bottom:0;">Score Log</h2>
+                    <button class="btn-primary" id="clearScoreDataBtn" style="background:#ef4444; font-size:0.85rem; padding:0.5rem 1rem;">
+                        <span class="material-symbols-rounded">delete_sweep</span>
+                        Clear & Fresh Start
+                    </button>
+                </div>
                 <table>
                     <thead>
                         <tr>
@@ -798,6 +804,10 @@
         socket.on('connect', () => socket.emit('joinAdmin'));
         socket.on('teamStatusChanged', () => fetchTeams());
         socket.on('scoreUpdated', () => {
+            fetchTeams();
+            fetchScoreLogs();
+        });
+        socket.on('scoreReset', () => {
             fetchTeams();
             fetchScoreLogs();
         });
@@ -1239,6 +1249,30 @@
                 fetchScoreLogs();
             } catch (e) {
                 window.APP_CONFIG.showToast('Failed to record score', 'error');
+            }
+        });
+
+        document.getElementById('clearScoreDataBtn').addEventListener('click', async () => {
+            const ok = confirm('Clear score log, reset all team scores, and make question status fresh?');
+            if (!ok) return;
+
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/scores/reset`, {
+                    method: 'DELETE',
+                    headers: authHeaders
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    window.APP_CONFIG.showToast(err.message || 'Failed to reset score data', 'error');
+                    return;
+                }
+
+                window.APP_CONFIG.showToast('Score data cleared. Fresh start ready.', 'success');
+                fetchTeams();
+                fetchScoreLogs();
+            } catch (e) {
+                window.APP_CONFIG.showToast('Failed to reset score data', 'error');
             }
         });
 
