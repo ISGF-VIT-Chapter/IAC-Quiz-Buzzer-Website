@@ -5,6 +5,9 @@ const redis = require('../config/redis');
 // --- Buzzer Logic for Teams ---
 
 exports.buzz = async (req, res) => {
+    // CAPTURE IMMEDIATELY to avoid Redis network lag adding seconds to their time!
+    const buzzTimeMs = Date.now();
+
     try {
         const { teamId } = req.user;
 
@@ -27,20 +30,56 @@ exports.buzz = async (req, res) => {
 
         // 3. Register the buzz with a precise MS timestamp score
         // Lower score is faster (better)
-        const buzzTimeMs = Date.now();
         await redis.zadd(`quiz:buzzes:${questionId}`, buzzTimeMs, teamId);
 
-        // Save history to PG
-        await prisma.buzzHistory.create({
+        // Save history to PG (InBackground)
+        prisma.buzzHistory.create({
             data: {
                 teamId,
                 questionId,
                 buzzTimeMs: BigInt(buzzTimeMs),
-                wasFirst: false // We evaluate 'first' later via the admin API
+                wasFirst: false
             }
-        });
+        }).catch(err => console.error("PG History error:", err));
 
-        res.json({ message: 'Buzz registered successfully!', timestamp: buzzTimeMs });
+        // 4. Check if this buzz was the FASTEST
+        const rank = await redis.zrank(`quiz:buzzes:${questionId}`, teamId);
+
+        const io = req.app.get('io');
+        let broadcastTeamName = 'Unknown Team';
+        let payload = null;
+
+        if (io) {
+            const team = await prisma.team.findUnique({
+                where: { id: teamId },
+                select: { teamName: true }
+            });
+            if (team) broadcastTeamName = team.teamName;
+
+            const activeStart = parseInt(state.activeRoundStartMs) || buzzTimeMs;
+            const timeDiffMs = buzzTimeMs - activeStart;
+            const timeDiffFormatted = (timeDiffMs / 1000).toFixed(3) + "s";
+
+            payload = {
+                teamId: teamId,
+                teamName: broadcastTeamName,
+                buzzTimeMs: buzzTimeMs,
+                timeDiff: timeDiffFormatted,
+                rank: rank + 1
+            };
+
+            // Only notify participants of the "winner" (First place) to gray out their screens
+            if (rank === 0) {
+                // Don't auto-lock! Let others keep buzzing to record their reaction times. 
+                // However, their screens naturally lock on the frontend when they receive `buzzWinner`.
+                io.emit('buzzWinner', payload);
+            }
+
+            // Alert Admin Dashboard of EVERY buzz so it can populate the scrollable table
+            io.emit('teamBuzzed', payload);
+        }
+
+        res.json({ message: 'Buzz registered successfully!', timestamp: buzzTimeMs, payload: payload });
 
     } catch (error) {
         console.error('Buzzer Registration Error:', error);

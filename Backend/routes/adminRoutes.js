@@ -17,8 +17,10 @@ router.delete('/teams/:id', protectAdmin, adminController.deleteTeam);
 router.put('/teams/:id/status', protectAdmin, adminController.toggleTeamStatus);
 
 // Quiz & Buzzer (Protected)
+router.get('/questions', protectAdmin, quizController.getQuestions);
 router.post('/buzzer/enable', protectAdmin, quizController.enableBuzzer);
 router.post('/buzzer/disable', protectAdmin, quizController.disableBuzzer);
 router.get('/buzzer/winner/:questionId', protectAdmin, quizController.getWinner);
+router.get('/buzzer/logs/:questionId', protectAdmin, quizController.getQuestionBuzzes);
 
 module.exports = router;

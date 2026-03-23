@@ -5,6 +5,9 @@ const redis = require('../config/redis');
 // --- Quiz State & Buzzer Logic ---
 
 exports.enableBuzzer = async (req, res) => {
+    // CAPTURE IMMEDIATELY to avoid admin network DB lag from affecting reaction time scores
+    const exactStartTime = Date.now().toString();
+
     try {
         const { questionId } = req.body;
 
@@ -15,7 +18,8 @@ exports.enableBuzzer = async (req, res) => {
         // Upstash / ioredis
         await redis.hset('quiz:state', {
             buzzerEnabled: 'true',
-            questionId: String(questionId)
+            questionId: String(questionId),
+            activeRoundStartMs: exactStartTime
         });
 
         // Clear previous buzzes for this question (if any exist by mistake)
@@ -79,5 +83,37 @@ exports.getWinner = async (req, res) => {
     } catch (error) {
         console.error('Winner calculation error:', error);
         res.status(500).json({ message: 'Error getting winner' });
+    }
+};
+
+exports.getQuestions = async (req, res) => {
+    try {
+        const questions = await prisma.question.findMany({
+            orderBy: { orderIndex: 'asc' }
+        });
+        res.json({ questions });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching questions' });
+    }
+};
+
+exports.getQuestionBuzzes = async (req, res) => {
+    try {
+        const { questionId } = req.params;
+        const buzzes = await prisma.buzzHistory.findMany({
+            where: { questionId },
+            include: { team: true },
+            orderBy: { buzzTimeMs: 'asc' }
+        });
+
+        res.json({
+            buzzes: buzzes.map(b => ({
+                team: b.team.teamName,
+                timeMs: Number(b.buzzTimeMs)
+            }))
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error fetching buzzes for question' });
     }
 };

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BuzzIt! - Arena</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,1,0" />
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+        body {
+            background: radial-gradient(circle at top right, rgba(168, 85, 247, 0.05), transparent 50%),
+                radial-gradient(circle at bottom left, rgba(251, 146, 60, 0.05), transparent 50%),
+                var(--bg-color);
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .top-nav {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-btn {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .back-btn:hover {
+            color: var(--text-main);
+        }
+
+        .nav-badges {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            color: white;
+            font-weight: 800;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .badge.team {
+            background: var(--primary-gradient);
+        }
+
+        .badge.round {
+            background: var(--orange-gradient);
+        }
+
+        .arena-layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            padding: 0 2rem 2rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 1024px) {
+            .arena-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Buzzer Main Area */
+        .buzzer-area {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(226, 232, 240, 0.6);
+            min-height: 600px;
+        }
+
+        .target-icon {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-size: 2.5rem;
+            opacity: 0.8;
+        }
+
+        .buzzer-status {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-style: italic;
+            z-index: 10;
+        }
+
+        /* THE BUTTON */
+        .buzzer-btn {
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            border: none;
+            cursor: not-allowed;
+            position: relative;
+            background: #e2e8f0;
+            box-shadow: inset 0 -10px 20px rgba(0, 0, 0, 0.1), 0 10px 20px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            gap: 0.5rem;
+        }
+
+        .buzzer-btn .icon {
+            font-size: 5rem;
+            color: #94a3b8;
+            transition: color 0.2s;
+        }
+
+        .buzzer-btn .text {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #94a3b8;
+            transition: color 0.2s;
+        }
+
+        /* ARMED STATE */
+        .buzzer-btn[data-state="armed"] {
+            cursor: pointer;
+            background: var(--orange-gradient);
+            box-shadow:
+                inset 0 -10px 20px rgba(0, 0, 0, 0.2),
+                inset 0 10px 20px rgba(255, 255, 255, 0.3),
+                0 20px 40px rgba(251, 146, 60, 0.4),
+                0 0 80px rgba(244, 63, 94, 0.4);
+            animation: pulse-orange 2s infinite;
+        }
+
+        .buzzer-btn[data-state="armed"] .icon {
+            color: white;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        }
+
+        .buzzer-btn[data-state="armed"] .text {
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .buzzer-btn[data-state="armed"]:active {
+            transform: scale(0.95);
+            box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.3), 0 5px 10px rgba(251, 146, 60, 0.4);
+        }
+
+        /* WINNER STATE */
+        .buzzer-btn[data-state="winner"] {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            /* Green */
+            box-shadow: 0 0 80px rgba(16, 185, 129, 0.4);
+            animation: none;
+        }
+
+        .buzzer-btn[data-state="winner"] .icon {
+            color: white;
+        }
+
+        .buzzer-btn[data-state="winner"] .text {
+            color: white;
+        }
+
+        /* LOSER STATE */
+        .buzzer-btn[data-state="loser"] {
+            background: #cbd5e1;
+            animation: none;
+            box-shadow: none;
+        }
+
+        .buzzer-btn[data-state="loser"] .icon {
+            color: #64748b;
+        }
+
+        .buzzer-btn[data-state="loser"] .text {
+            color: #64748b;
+        }
+
+        @keyframes pulse-orange {
+            0% {
+                box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 30px rgba(251, 146, 60, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(251, 146, 60, 0);
+            }
+        }
+
+        /* Leaderboard Sidebar */
+        .leaderboard {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft);
+            border: 1px solid rgba(226, 232, 240, 0.6);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lb-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+        }
+
+        .lb-header .icon {
+            background: var(--orange-gradient);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .lb-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .lb-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: var(--radius-sm);
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .lb-card .rank {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: var(--text-muted);
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Rank Types */
+        .lb-card.rank-1 {
+            background: #fefce8;
+            border-color: #fde047;
+        }
+
+        .lb-card.rank-1 .rank {
+            background: transparent;
+            color: #eab308;
+            font-size: 24px;
+        }
+
+        .lb-card.rank-2 {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .lb-card.rank-2 .rank {
+            background: transparent;
+            color: #94a3b8;
+            font-size: 24px;
+        }
+
+        .lb-card.rank-3 {
+            background: #fff7ed;
+            border-color: #ffedd5;
+        }
+
+        .lb-card.rank-3 .rank {
+            background: transparent;
+            color: #f97316;
+            font-size: 24px;
+        }
+
+        .lb-info {
+            flex: 1;
+        }
+
+        .lb-info h4 {
+            margin: 0;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .lb-info p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .lb-footer-tip {
+            margin-top: auto;
+            padding-top: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="top-nav">
+        <a href="#" class="back-btn" id="logoutBtn">
+            <span class="material-symbols-rounded">arrow_back</span> Back to Login
+        </a>
+        <div class="nav-badges">
+            <div class="badge team" id="teamBadgeDisplay">Loading...</div>
+            <div class="badge round">Active Round</div>
+        </div>
+    </nav>
+
+    <div class="arena-layout">
+
+        <main class="buzzer-area">
+            <span class="material-symbols-rounded target-icon" style="color: #60a5fa;">my_location</span>
+
+            <div class="buzzer-status" id="statusText">
+                <span class="material-symbols-rounded">hourglass_empty</span>
+                Waiting for next question...
+            </div>
+
+            <button class="buzzer-btn" id="buzzerBtn" data-state="idle" disabled>
+                <span class="material-symbols-rounded icon" id="buzzerIcon">power_settings_new</span>
+                <span class="text" id="buzzerLabel">BUZZ!</span>
+            </button>
+        </main>
+
+        <aside class="leaderboard">
+            <div class="lb-header">
+                <div class="icon"><span class="material-symbols-rounded">emoji_events</span></div>
+                Leaderboard
+            </div>
+
+            <div class="lb-list" id="leaderboardList">
+                <!-- Fetched from API -->
+                <div class="lb-card" style="justify-content: center; color: var(--text-muted);">
+                    Loading Top Teams...
+                </div>
+            </div>
+
+            <div class="lb-footer-tip">
+                <span class="material-symbols-rounded" style="font-size: 16px; color: #fb923c;">lightbulb</span>
+                Scores update after each round
+            </div>
+        </aside>
+
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // -------------------------------------------------------------
+        // INITIALIZATION & AUTH CHECK
+        // -------------------------------------------------------------
+        const token = localStorage.getItem('teamToken');
+        const teamDataRaw = localStorage.getItem('team');
+        if (!token || !teamDataRaw) {
+            window.location.href = 'index.html';
+        }
+
+        const teamData = JSON.parse(teamDataRaw);
+        document.getElementById('teamBadgeDisplay').textContent = teamData.teamName;
+
+        // UI Elements
+        const buzzerBtn = document.getElementById('buzzerBtn');
+        const statusText = document.getElementById('statusText');
+        const buzzerIcon = document.getElementById('buzzerIcon');
+        const leaderboardList = document.getElementById('leaderboardList');
+
+        // -------------------------------------------------------------
+        // LEADERBOARD FETCHING (Simplified without real API yet, we'll fetch team scores)
+        // -------------------------------------------------------------
+        async function fetchLeaderboard() {
+            try {
+                // Reusing admin team route as a quick hack if it's protected, 
+                // wait, participants don't have access to /api/admin/teams.
+                // Ideally backend would have a public or team-accessible /api/team/leaderboard
+                // For now let's just create mock entries based on what we'd expect,
+                // or build a tiny real one if the endpoint existed. Since it doesn't, we show a placeholder.
+                leaderboardList.innerHTML = `
+                <div class="lb-card rank-1">
+                    <div class="rank"><span class="material-symbols-rounded">Workspace_Premium</span></div>
+                    <div class="lb-info"><h4>Current Rankings</h4><p>Hidden during live round</p></div>
+                </div>
+            `;
+            } catch (e) { }
+        }
+        fetchLeaderboard();
+
+        // -------------------------------------------------------------
+        // LOGOUT HANDLER
+        // -------------------------------------------------------------
+        document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+                await fetch(`${window.APP_CONFIG.backendUrl}/api/team/logout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+                });
+            } catch (err) { }
+            localStorage.clear();
+            window.location.href = 'index.html';
+        });
+
+
+        // -------------------------------------------------------------
+        // SOCKET.IO CONNECTION
+        // -------------------------------------------------------------
+        const socket = io(window.APP_CONFIG.backendUrl);
+        socket.on('connect', () => socket.emit('joinTeam', teamData.id));
+
+        // FORCE LOGOUT IF KICKED BY ADMIN
+        socket.on('teamRemoved', (data) => {
+            if (data.teamId === teamData.id) {
+                localStorage.clear();
+                window.location.href = 'index.html?kicked=1';
+            }
+        });
+
+        // ARMED
+        socket.on('buzzerEnabled', (data) => {
+            window.myBuzzData = null; // Clear previous buzz data for new round
+            buzzerBtn.disabled = false;
+            buzzerBtn.setAttribute('data-state', 'armed');
+            buzzerIcon.textContent = 'bolt';
+            statusText.innerHTML = '<span class="material-symbols-rounded" style="color:#f97316;">bolt</span> <span class="text-gradient">Question is live! Click the buzzer now!</span>';
+        });
+
+        // DISABLED
+        socket.on('buzzerDisabled', () => {
+            window.myBuzzData = null;
+            buzzerBtn.disabled = true;
+            buzzerBtn.setAttribute('data-state', 'idle');
+            buzzerIcon.textContent = 'power_settings_new';
+            statusText.innerHTML = '<span class="material-symbols-rounded">hourglass_empty</span> Waiting for next question...';
+        });
+
+        // WINNER ANNOUNCED
+        socket.on('buzzWinner', (winnerData) => {
+            if (winnerData.teamId === teamData.id) {
+                // Ignore, because our fetch request ALREADY populated this with Rank 1 and Time details!
+            } else {
+                buzzerBtn.disabled = true;
+                buzzerBtn.setAttribute('data-state', 'loser');
+                buzzerIcon.textContent = 'block';
+                // Only overwrite if we haven't successfully recorded our own buzz timing physically
+                if (!window.myBuzzData) {
+                    statusText.innerHTML = `<span style="color:#ef4444; font-weight:800;">${winnerData.teamName} Buzzed!</span>`;
+                }
+            }
+        });
+
+        // -------------------------------------------------------------
+        // BUZZ (CLICK)
+        // -------------------------------------------------------------
+        buzzerBtn.addEventListener('click', async () => {
+            if (buzzerBtn.getAttribute('data-state') !== 'armed') return;
+
+            // Optimistic UI update
+            buzzerBtn.setAttribute('data-state', 'idle'); // prevents double click UI
+            statusText.innerHTML = '<span class="material-symbols-rounded spin">sync</span> Sending...';
+
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/team/buzz`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    window.APP_CONFIG.showToast(data.message, 'error');
+                } else {
+                    // Record successful buzz so sockets don't overwrite our personal ranking!
+                    window.myBuzzData = data.payload;
+
+                    const r = data.payload.rank;
+                    const ord = r === 1 ? '1st' : r === 2 ? '2nd' : r === 3 ? '3rd' : `${r}th`;
+
+                    buzzerBtn.setAttribute('data-state', r === 1 ? 'winner' : 'loser');
+                    buzzerIcon.textContent = r === 1 ? 'verified' : 'timer';
+
+                    statusText.innerHTML = `
+                        <span style="color:${r === 1 ? '#10b981' : '#facc15'}; font-weight:800;">
+                            You're the ${ord} team to press it!
+                        </span>
+                        <br>
+                        <span style="font-family:monospace; font-size:1.1rem; color:var(--text-main);">
+                            Time: ${data.payload.timeDiff}
+                        </span>
+                    `;
+                }
+            } catch (err) {
+                console.error(err);
+                window.APP_CONFIG.showToast('Error: ' + err.message, 'error');
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -22,6 +22,7 @@ model Team {
   teamName  String
   teamCode  String   @unique // e.g. "TEAM01" — login credential
   password  String
+  rawPassword String?
   score     Int      @default(0)
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -42,14 +43,12 @@ model Question {
   orderIndex    Int      // display order within a round
   points        Int      @default(10)
   createdAt     DateTime @default(now())
-
-  buzzes BuzzHistory[]
 }
 
 model BuzzHistory {
   id            String   @id @default(cuid())
   teamId        String
-  questionId    String
+  questionId    String   // Currently storing "round-timestamp" for freestyle buzzing
   buzzTimeMs    BigInt   // Unix timestamp in milliseconds for precision
   wasFirst      Boolean  @default(false)
   wasCorrect    Boolean?
@@ -57,7 +56,6 @@ model BuzzHistory {
   createdAt     DateTime @default(now())
 
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([questionId, buzzTimeMs])
 }

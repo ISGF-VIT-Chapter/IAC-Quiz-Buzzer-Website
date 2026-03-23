@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BuzzIt! Admin Panel</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,1,0" />
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+        body {
+            background: var(--bg-color);
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Navigation (Deep Purple Theme) */
+        .sidebar {
+            background: linear-gradient(180deg, #4c1d95 0%, #312e81 100%);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1rem;
+            width: 280px;
+            z-index: 100;
+            color: white;
+            box-sizing: border-box;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 800;
+            font-size: 1.5rem;
+            margin-bottom: 3rem;
+            padding: 0 0.5rem;
+        }
+
+        .brand .icon {
+            background: #facc15;
+            color: #4c1d95;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotate(-10deg);
+            font-size: 28px;
+        }
+
+        .brand .subtitle {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #c4b5fd;
+            display: block;
+            margin-top: 0.2rem;
+        }
+
+        .nav-items {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            color: #e0e7ff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .logout-btn {
+            color: #fca5a5;
+            margin-top: auto;
+        }
+
+        .logout-btn:hover {
+            background: rgba(248, 113, 113, 0.2);
+            color: #fef2f2;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2.5rem 3rem;
+            background: var(--bg-color);
+        }
+
+        .view-section {
+            display: none;
+            animation: slideIn 0.3s forwards;
+        }
+
+        .view-section.active {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Headers */
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.75rem;
+            font-weight: 800;
+            margin: 0 0 2rem 0;
+            color: var(--text-main);
+        }
+
+        .page-title .icon {
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Tables */
+        .table-container {
+            background: var(--card-bg);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-soft);
+            border: 1px solid rgba(226, 232, 240, 0.6);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            padding: 1rem;
+            border-bottom: 2px solid var(--input-bg);
+            color: var(--text-main);
+            font-weight: 800;
+            font-size: 0.875rem;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--input-bg);
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
+        .status-pill.online {
+            background: var(--success-light);
+            color: var(--success);
+            border-color: rgba(34, 197, 94, 0.2);
+        }
+
+        .status-pill.offline {
+            background: var(--input-bg);
+            color: var(--text-muted);
+            border-color: #e2e8f0;
+        }
+
+        .status-pill.blue {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        /* VIEW 1: Team Registration */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            color: white;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .stat-card h3 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 800;
+        }
+
+        .stat-card p {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            opacity: 0.9;
+            margin-top: 1rem;
+        }
+
+        .sc-blue {
+            background: #3b82f6;
+        }
+
+        .sc-green {
+            background: #22c55e;
+        }
+
+        .sc-red {
+            background: #ef4444;
+        }
+
+        .control-card {
+            background: white;
+            border-radius: var(--radius-md);
+            padding: 2rem;
+            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow-soft);
+            margin-bottom: 2rem;
+        }
+
+        .add-team-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .pt-input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--input-bg);
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
+            box-sizing: border-box;
+        }
+
+        .submit-green-btn {
+            background: #059669;
+            color: white;
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-weight: 800;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: background 0.2s;
+        }
+
+        .submit-green-btn:hover {
+            background: #047857;
+        }
+
+        .remove-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* VIEW 2: Buzzer Control */
+        .buzzer-toggle-btn {
+            background: #64748b;
+            color: white;
+            padding: 1.5rem;
+            width: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 800;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            margin: 0 auto;
+            transition: all 0.2s;
+        }
+
+        .buzzer-toggle-btn:hover {
+            background: #475569;
+        }
+
+        .buzzer-status-bar {
+            background: #94a3b8;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            border-radius: var(--radius-sm);
+            font-weight: 800;
+            margin-top: 1.5rem;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .buzzer-toggle-btn.active-arm {
+            background: #ef4444;
+            animation: pulseRed 2s infinite;
+        }
+
+        .buzzer-status-bar.active-bar {
+            background: #22c55e;
+        }
+
+        @keyframes pulseRed {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 15px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+
+        /* VIEW 3: Scoring Panel */
+        .score-hint {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            font-style: italic;
+        }
+
+        /* VIEW 4: Team Overview */
+        .rank-row.rank-1 td {
+            background: linear-gradient(to right, rgba(253, 224, 71, 0.15), transparent);
+            border-left: 4px solid #facc15;
+        }
+
+        .rank-row.rank-1 .rank-icon {
+            color: #facc15;
+            font-size: 24px;
+            vertical-align: middle;
+        }
+
+        .rank-row.rank-2 td {
+            background: linear-gradient(to right, rgba(203, 213, 225, 0.15), transparent);
+            border-left: 4px solid #94a3b8;
+        }
+
+        .rank-row.rank-2 .rank-icon {
+            color: #94a3b8;
+            font-size: 24px;
+            vertical-align: middle;
+        }
+
+        .rank-row.rank-3 td {
+            background: linear-gradient(to right, rgba(251, 146, 60, 0.1), transparent);
+            border-left: 4px solid #fb923c;
+        }
+
+        .rank-row.rank-3 .rank-icon {
+            color: #fb923c;
+            font-size: 24px;
+            vertical-align: middle;
+        }
+
+        .points-badge {
+            background: #f3e8ff;
+            color: #a855f7;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 0.85rem;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .detail-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow-soft);
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-card h4 {
+            margin: 0 0 1rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.1rem;
+        }
+
+        .detail-card .bot-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: auto;
+        }
+
+        .detail-card .bot-row span.r {
+            font-weight: 800;
+            color: #a855f7;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="icon"><span class="material-symbols-rounded">bolt</span></div>
+            <div>
+                BuzzIt Admin
+                <span class="subtitle">Control Panel</span>
+            </div>
+        </div>
+
+        <nav class="nav-items">
+            <a class="nav-item active" data-target="v-registration"><span
+                    class="material-symbols-rounded">person_add</span> Team Registration</a>
+            <a class="nav-item" data-target="v-buzzer"><span
+                    class="material-symbols-rounded">notifications_active</span> Buzzer Control</a>
+            <a class="nav-item" data-target="v-scoring"><span class="material-symbols-rounded">assignment</span> Scoring
+                Panel</a>
+            <a class="nav-item" data-target="v-overview"><span class="material-symbols-rounded">groups</span> Team
+                Overview</a>
+            <a class="nav-item" data-target="v-questions"><span class="material-symbols-rounded">bar_chart</span>
+                Question Status</a>
+        </nav>
+
+        <a class="nav-item logout-btn" id="logoutBtn"><span class="material-symbols-rounded">arrow_back</span> Back to
+            Login</a>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: Team Registration                  -->
+        <!-- ========================================== -->
+        <div class="view-section active" id="v-registration">
+            <div class="stats-grid" id="regStatsContainer">
+                <div class="stat-card sc-blue">
+                    <h3>0</h3>
+                    <p>Total Teams</p>
+                </div>
+                <div class="stat-card sc-green">
+                    <h3>0</h3>
+                    <p>Currently Active Teams</p>
+                </div>
+                <div class="stat-card sc-red">
+                    <h3>0</h3>
+                    <p>Offline Teams</p>
+                </div>
+            </div>
+
+            <div class="control-card">
+                <h2 style="margin: 0 0 1.5rem 0;">Register New Team</h2>
+                <form id="addTeamForm">
+                    <div class="add-team-grid">
+                        <div>
+                            <div class="input-label">Team Name</div>
+                            <input type="text" id="tName" class="pt-input" placeholder="Enter team name" required>
+                        </div>
+                        <div>
+                            <div class="input-label">Login Code</div>
+                            <input type="text" id="tCode" class="pt-input" placeholder="Enter login code" required>
+                        </div>
+                        <div>
+                            <div class="input-label">Password</div>
+                            <input type="text" id="tPass" class="pt-input" placeholder="Enter password" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-green-btn"><span class="material-symbols-rounded">add</span>
+                        Register Team</button>
+                </form>
+            </div>
+
+            <div class="table-container">
+                <h2>Registered Teams</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Team Name</th>
+                            <th>Login Code</th>
+                            <th>Password (Hash)</th>
+                            <th>Login Status</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mgmtTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: Buzzer Control                     -->
+        <!-- ========================================== -->
+        <div class="view-section" id="v-buzzer">
+            <h1 class="page-title">
+                <div class="icon" style="background:#ef4444;"><span
+                        class="material-symbols-rounded">notifications_active</span></div> Buzzer Control Panel
+            </h1>
+
+            <div class="control-card" style="text-align: center; position: relative;">
+                <div
+                    style="display:inline-flex; align-items:center; gap:0.5rem; background:white; border:2px solid #a855f7; color:#a855f7; padding:0.25rem 1rem; border-radius:999px; font-weight:800; font-size:0.85rem; margin-bottom: 2rem; position:absolute; left: 1rem; top: 1rem; box-shadow: 0 4px 6px rgba(168, 85, 247, 0.15);">
+                    <span class="material-symbols-rounded" style="font-size: 18px;">quiz</span>
+                    <select id="activeQuestionSelect"
+                        style="border:none; background:transparent; color:#a855f7; font-weight:800; font-family: 'Nunito', sans-serif; outline:none; font-size: 1rem; cursor: pointer;">
+                        <!-- Options loaded by JS -->
+                    </select>
+                </div>
+                <h3 style="font-size: 1.25rem; margin-bottom: 1.5rem;">Control Buzzer</h3>
+
+                <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem;">
+                    <button class="buzzer-toggle-btn" id="armBuzzerBtn" style="width: auto; padding: 1rem 2rem;"><span
+                            class="material-symbols-rounded">bolt</span>
+                        Enable Buzzer</button>
+                    <button class="buzzer-toggle-btn" id="disableBuzzerBtn"
+                        style="width: auto; padding: 1rem 2rem; background: #ef4444;"><span
+                            class="material-symbols-rounded">power_settings_new</span>
+                        Turn Off Buzzer</button>
+                </div>
+                <div class="buzzer-status-bar" id="buzzerStatusBar"><span class="material-symbols-rounded">bolt</span>
+                    Buzzer is Disabled</div>
+            </div>
+
+            <div class="table-container">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>Buzz Timings</h2>
+                    <button class="btn-primary" id="resetRoundBtn"
+                        style="background:var(--input-bg); color:var(--text-main); font-size:0.85rem;"><span
+                            class="material-symbols-rounded">delete</span> Clear Logs</button>
+                </div>
+
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table>
+                        <thead style="position: sticky; top: 0; background: var(--card-bg); z-index: 1;">
+                            <tr>
+                                <th>Rank</th>
+                                <th>Team Name</th>
+                                <th>Time of Buzz</th>
+                                <th>Time Difference</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="buzzTimingsBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center; color:var(--text-muted); font-style:italic;">
+                                    Waiting for buzzes...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- VIEW 3: Scoring Panel                      -->
+        <!-- ========================================== -->
+        <div class="view-section" id="v-scoring">
+            <h1 class="page-title">
+                <div class="icon" style="background:#059669;"><span class="material-symbols-rounded">assignment</span>
+                </div> Scoring Panel
+            </h1>
+
+            <div class="control-card">
+                <h2>Award Points</h2>
+                <div class="score-hint"><span class="material-symbols-rounded"
+                        style="color:#facc15; font-size:18px;">lightbulb</span> Tip: Enter negative values to deduct
+                    points for incorrect answers</div>
+
+                <div class="add-team-grid">
+                    <div>
+                        <div class="input-label">Team Name</div>
+                        <select class="pt-input" id="scoreTeamSelect">
+                            <!-- Injected via JS -->
+                        </select>
+                    </div>
+                    <div>
+                        <div class="input-label">Question Number</div>
+                        <input type="text" id="scoreQNum" class="pt-input" placeholder="Enter question #">
+                    </div>
+                    <div>
+                        <div class="input-label">Points to Award (+ or -)</div>
+                        <input type="number" id="scoreAmount" class="pt-input" placeholder="e.g., 50 or -10">
+                    </div>
+                </div>
+                <button class="submit-green-btn" id="submitScoreBtn"><span class="material-symbols-rounded">add</span>
+                    Submit Score</button>
+            </div>
+
+            <div class="table-container">
+                <h2>Score Log</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Team Name</th>
+                            <th>Question Number</th>
+                            <th>Points Awarded</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scoreLogBody">
+                        <tr>
+                            <td colspan="4" style="text-align:center; color:var(--text-muted); font-style:italic;">Log
+                                is manually maintained for this round. No entries yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- VIEW 4: Team Overview                      -->
+        <!-- ========================================== -->
+        <div class="view-section" id="v-overview">
+            <h1 class="page-title">
+                <div class="icon" style="background:#3b82f6;"><span class="material-symbols-rounded">emoji_events</span>
+                </div> Team Overview & Leaderboard
+            </h1>
+
+            <div class="table-container">
+                <h3 style="color: var(--warning); display: flex; align-items: center; gap: 0.5rem; margin-top:0;"><span
+                        class="material-symbols-rounded">workspace_premium</span> Leaderboard Rankings</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Team Name</th>
+                            <th>Total Points</th>
+                            <th>Questions Answered</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lbTableBody"></tbody>
+                </table>
+            </div>
+
+            <h2 style="font-weight: 800; color: var(--text-main);">Team Details</h2>
+            <div class="details-grid" id="detailsGrid"></div>
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- VIEW 5: Question Status                    -->
+        <!-- ========================================== -->
+        <div class="view-section" id="v-questions">
+            <!-- Re-used exact layout from previous update since the user didn't specify a new layout for this, just keeping it consistent -->
+            <h1 class="page-title">
+                <div class="icon" style="background: linear-gradient(135deg, #ec4899, #8b5cf6);"><span
+                        class="material-symbols-rounded">bar_chart</span></div> Question Status
+            </h1>
+
+            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="stat-card" style="background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);">
+                    <h3>5</h3>
+                    <p>Total Questions</p>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);">
+                    <h3>3</h3>
+                    <p>Answered</p>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #64748b 0%, #334155 100%);">
+                    <h3>1</h3>
+                    <p>Unanswered</p>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+                    <div class="status-pill online" style="font-size: 0.9rem; padding: 0.5rem 1rem;"><span
+                            class="material-symbols-rounded" style="font-size: 16px;">check_circle</span> Answered</div>
+                    <div class="status-pill offline" style="font-size: 0.9rem; padding: 0.5rem 1rem;"><span
+                            class="material-symbols-rounded" style="font-size: 16px;">cancel</span> Unanswered</div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Question Number</th>
+                            <th>Answered By</th>
+                            <th>Points Awarded</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><b>#1</b></td>
+                            <td>Quiz Masters</td>
+                            <td><span style="color:#22c55e; font-weight: 700;">50 pts</span></td>
+                            <td><span class="status-pill online">answered</span></td>
+                        </tr>
+                        <tr>
+                            <td><b>#2</b></td>
+                            <td>Brain Squad</td>
+                            <td><span style="color:#22c55e; font-weight: 700;">50 pts</span></td>
+                            <td><span class="status-pill online">answered</span></td>
+                        </tr>
+                        <tr style="background: rgba(254,240,138, 0.2);">
+                            <td><b>#3</b></td>
+                            <td>Smart Cookies</td>
+                            <td><span style="color:#eab308; font-weight: 700;">30 pts</span></td>
+                            <td><span class="status-pill" style="background:#fef3c7; color:#f59e0b;">attempted</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><b>#4</b></td>
+                            <td style="color:var(--text-muted); font-style:italic;">Not answered</td>
+                            <td>-</td>
+                            <td><span class="status-pill offline">unanswered</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="config.js"></script>
+    <script>
+        // -----------------------------------------------------------------
+        // INIT & AUTH
+        // -----------------------------------------------------------------
+        const token = localStorage.getItem('adminToken');
+        if (!token) window.location.href = 'admin.html';
+        const authHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+        // Tab Navigation
+        document.querySelectorAll('.nav-item[data-target]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                document.getElementById(e.currentTarget.dataset.target).classList.add('active');
+            });
+        });
+
+        // -----------------------------------------------------------------
+        // REALTIME BUZZER CONTROL
+        // -----------------------------------------------------------------
+        const socket = io(window.APP_CONFIG.backendUrl);
+        socket.on('connect', () => socket.emit('joinAdmin'));
+        socket.on('teamStatusChanged', () => fetchTeams());
+
+        const armBtn = document.getElementById('armBuzzerBtn');
+        const resetBtn = document.getElementById('resetRoundBtn');
+        const buzzerStatusBar = document.getElementById('buzzerStatusBar');
+        let buzzLogs = [];
+
+        // Listen for ANY team buzzing to populate the timeline list
+        socket.on('teamBuzzed', (data) => {
+            const theTime = new Date(data.buzzTimeMs).toISOString().substring(11, 23);
+            buzzLogs.push({ team: data.teamName, time: theTime, diff: data.timeDiff || "0.000s" });
+            renderBuzzLogs();
+        });
+
+        // When the first person buzzes, backend auto-disables and broadcasts winner
+        socket.on('buzzWinner', (data) => {
+            armBtn.classList.remove('active-arm');
+            armBtn.innerHTML = '<span class="material-symbols-rounded">bolt</span> Enable Buzzer';
+            buzzerStatusBar.classList.remove('active-bar');
+            buzzerStatusBar.innerHTML = '<span class="material-symbols-rounded">bolt</span> Round Concluded';
+        });
+
+        const disableBuzzerBtn = document.getElementById('disableBuzzerBtn');
+        const activeQuestionSelect = document.getElementById('activeQuestionSelect');
+
+        async function fetchQuestions() {
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/questions`, { headers: authHeaders });
+                const data = await res.json();
+                activeQuestionSelect.innerHTML = data.questions.map(q => `<option value="${q.id}">Q${q.orderIndex}: ${q.questionText}</option>`).join('');
+                if (data.questions.length > 0) fetchQuestionLogs(data.questions[0].id);
+            } catch (e) {
+                console.error("Failed to load generic questions");
+            }
+        }
+
+        async function fetchQuestionLogs(qId) {
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/buzzer/logs/${qId}`, { headers: authHeaders });
+                const data = await res.json();
+                buzzLogs = data.buzzes.map(b => {
+                    const theTime = new Date(b.timeMs).toISOString().substring(11, 23);
+                    return { team: b.team, time: theTime, diff: "Logged" }; // 'Logged' or calculate logic
+                });
+                renderBuzzLogs();
+            } catch (e) { }
+        }
+
+        activeQuestionSelect.addEventListener('change', (e) => {
+            fetchQuestionLogs(e.target.value);
+            armBtn.classList.remove('active-arm');
+            armBtn.innerHTML = '<span class="material-symbols-rounded">bolt</span> Enable Buzzer';
+            buzzerStatusBar.classList.remove('active-bar');
+            buzzerStatusBar.innerHTML = '<span class="material-symbols-rounded">bolt</span> Buzzer is Disabled';
+        });
+
+        // Initialize questions on load
+        fetchQuestions();
+
+        armBtn.addEventListener('click', async () => {
+            armBtn.classList.add('active-arm');
+            armBtn.innerHTML = '<span class="material-symbols-rounded">sensors</span> Buzzer Live';
+            buzzerStatusBar.classList.add('active-bar');
+            buzzerStatusBar.innerHTML = '<span class="material-symbols-rounded">bolt</span> Waiting for Buzz...';
+            buzzLogs = []; renderBuzzLogs(); // Auto-clear board for the new question
+
+            const qId = activeQuestionSelect.value;
+            try {
+                await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/buzzer/enable`, {
+                    method: 'POST', headers: authHeaders, body: JSON.stringify({ questionId: qId })
+                });
+            } catch (e) { }
+        });
+
+        disableBuzzerBtn.addEventListener('click', async () => {
+            armBtn.classList.remove('active-arm');
+            armBtn.innerHTML = '<span class="material-symbols-rounded">bolt</span> Enable Buzzer';
+            buzzerStatusBar.classList.remove('active-bar');
+            buzzerStatusBar.innerHTML = '<span class="material-symbols-rounded">bolt</span> Buzzer is Disabled';
+            try {
+                await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/buzzer/disable`, {
+                    method: 'POST', headers: authHeaders
+                });
+            } catch (e) { }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            buzzLogs = [];
+            renderBuzzLogs();
+        });
+
+        function renderBuzzLogs() {
+            const bd = document.getElementById('buzzTimingsBody');
+            if (buzzLogs.length === 0) {
+                bd.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); font-style:italic;">Waiting for buzzes...</td></tr>';
+                return;
+            }
+            bd.innerHTML = '';
+            buzzLogs.forEach((l, i) => {
+                let rankHtml = `#${i + 1}`;
+                if (i === 0) rankHtml = `<span class="material-symbols-rounded" style="color:#facc15;">workspace_premium</span> #1`;
+                if (i === 1) rankHtml = `<span class="material-symbols-rounded" style="color:#94a3b8;">military_tech</span> #2`;
+                if (i === 2) rankHtml = `<span class="material-symbols-rounded" style="color:#fb923c;">military_tech</span> #3`;
+
+                bd.innerHTML += `
+            <tr style="${i === 0 ? 'background: rgba(253, 224, 71, 0.15);' : ''}">
+                <td style="font-weight:800;">${rankHtml}</td>
+                <td style="font-weight:800;">${l.team}</td>
+                <td style="font-family:monospace;">${l.time}</td>
+                <td style="color:#a855f7; font-weight:700;">${l.diff}</td>
+                <td><span class="status-pill ${i === 0 ? 'online' : 'blue'}">Buzzed</span></td>
+            </tr>`;
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // TEAMS DATA (Registration, Overview, Scoring)
+        // -----------------------------------------------------------------
+        let teams = [];
+
+        async function fetchTeams() {
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams`, { headers: authHeaders });
+                if (res.status === 401 || res.status === 403) { localStorage.removeItem('adminToken'); window.location.href = 'admin.html'; }
+                const data = await res.json();
+
+                // Sort descending by score for leaderboard
+                teams = (data.teams || []).sort((a, b) => b.score - a.score);
+                renderMgmtTable();
+                renderLeaderboard();
+            } catch (e) { }
+        }
+
+        function renderMgmtTable() {
+            const tbody = document.getElementById('mgmtTableBody');
+            const select = document.getElementById('scoreTeamSelect');
+            const statBoxes = document.getElementById('regStatsContainer');
+
+            tbody.innerHTML = '';
+            select.innerHTML = '<option value="">Select team</option>';
+
+            let total = teams.length;
+            let online = teams.filter(t => t.isActive).length;
+            let offline = total - online;
+
+            statBoxes.innerHTML = `
+        <div class="stat-card sc-blue"><h3>${total}</h3><p>Total Teams</p></div>
+        <div class="stat-card sc-green"><h3>${online}</h3><p>Currently Active Teams</p></div>
+        <div class="stat-card sc-red"><h3>${offline}</h3><p>Offline Teams</p></div>
+      `;
+
+            teams.forEach(t => {
+                tbody.innerHTML += `
+          <tr>
+            <td><div style="font-weight: 800;">${t.teamName}</div></td>
+            <td><div style="font-family: monospace; background: var(--bg-color); padding: 0.25rem 0.5rem; border-radius: 4px; display:inline-block;">${t.teamCode}</div></td>
+            <td><span style="font-family: monospace; letter-spacing: 1px;">${t.rawPassword || '***'}</span></td>
+            <td><span class="status-pill ${t.isActive ? 'online' : 'offline'}"><span class="material-symbols-rounded" style="font-size:14px;">${t.isActive ? 'wifi' : 'wifi_off'}</span> ${t.isActive ? 'Online' : 'Offline'}</span></td>
+            <td><span class="status-pill blue">active</span></td>
+            <td><button class="remove-btn" onclick="deleteTeam('${t.id}')"><span class="material-symbols-rounded">delete</span> Remove</button></td>
+          </tr>
+        `;
+                select.innerHTML += `<option value="${t.id}">${t.teamName}</option>`;
+            });
+        }
+
+        function renderLeaderboard() {
+            const lbBody = document.getElementById('lbTableBody');
+            const details = document.getElementById('detailsGrid');
+            lbBody.innerHTML = '';
+            details.innerHTML = '';
+
+            teams.forEach((t, i) => {
+                const rank = i + 1;
+                let rankHtml = `#${rank}`;
+                let rowClass = `rank-row rank-${rank}`;
+
+                if (rank === 1) rankHtml = `<span class="material-symbols-rounded rank-icon">workspace_premium</span> #1`;
+                if (rank === 2) rankHtml = `<span class="material-symbols-rounded rank-icon">military_tech</span> #2`;
+                if (rank === 3) rankHtml = `<span class="material-symbols-rounded rank-icon">military_tech</span> #3`;
+
+                lbBody.innerHTML += `
+          <tr class="${rowClass}">
+            <td style="font-weight: 800; font-size: 1.1rem;">${rankHtml}</td>
+            <td><div style="font-weight: 800; font-size: 1.1rem;">${t.teamName}</div></td>
+            <td><span class="points-badge">${t.score} pts</span></td>
+            <td>0</td>
+            <td><span class="status-pill ${t.isActive ? 'online' : 'offline'}"><span class="material-symbols-rounded" style="font-size:14px;">${t.isActive ? 'wifi' : 'wifi_off'}</span> ${t.isActive ? 'Online' : 'Offline'}</span></td>
+          </tr>
+        `;
+
+                if (rank <= 3) {
+                    let iconColor = rank === 1 ? '#eab308' : rank === 2 ? '#94a3b8' : '#f97316';
+                    details.innerHTML += `
+            <div class="detail-card">
+              <h4>${t.teamName} <span class="material-symbols-rounded" style="color:${iconColor};">workspace_premium</span></h4>
+              <div class="status-pill online" style="width: max-content; margin-bottom: 2rem;">
+                  active
+              </div>
+              <div class="bot-row">
+                <span style="color:var(--text-muted); font-size:0.9rem;">Rank:</span>
+                <span class="r">#${rank}</span>
+              </div>
+            </div>
+          `;
+                }
+            });
+        }
+
+        // Add Team
+        document.getElementById('addTeamForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams`, {
+                    method: 'POST', headers: authHeaders,
+                    body: JSON.stringify({
+                        teamName: document.getElementById('tName').value,
+                        teamCode: document.getElementById('tCode').value,
+                        password: document.getElementById('tPass').value
+                    })
+                });
+                document.getElementById('addTeamForm').reset();
+                window.APP_CONFIG.showToast('Team Registered!', 'success');
+                fetchTeams();
+            } catch (err) { }
+        });
+
+        // Score Submit mock
+        document.getElementById('submitScoreBtn').addEventListener('click', () => {
+            let teamSelect = document.getElementById('scoreTeamSelect');
+            let amt = document.getElementById('scoreAmount').value;
+            let qNum = document.getElementById('scoreQNum').value;
+            if (!teamSelect.value || !amt) { window.APP_CONFIG.showToast('Select team and amount', 'error'); return; }
+
+            // Push mock to table
+            let teamName = teamSelect.options[teamSelect.selectedIndex].text;
+            let timeLabel = new Date().toTimeString().substring(0, 8);
+            let ptsStr = parseInt(amt) > 0 ? `+${amt} pts` : `${amt} pts`;
+            let colorClass = parseInt(amt) > 0 ? 'online' : 'offline';
+
+            document.getElementById('scoreLogBody').innerHTML = `
+          <tr>
+            <td style="font-weight:800;">${teamName}</td>
+            <td>${qNum}</td>
+            <td><span class="status-pill ${colorClass}">${ptsStr}</span></td>
+            <td>${timeLabel}</td>
+          </tr>
+        ` + (document.getElementById('scoreLogBody').innerHTML.includes('No entries') ? '' : document.getElementById('scoreLogBody').innerHTML);
+
+            // Actual db update requires backend score update route. For now, we mock the UI update.
+            window.APP_CONFIG.showToast('Score recorded.', 'success');
+            document.getElementById('scoreAmount').value = '';
+        });
+
+        window.deleteTeam = async (id) => {
+            if (!confirm("Remove this team from the arena?")) return;
+            await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams/${id}`, { method: 'DELETE', headers: authHeaders });
+            fetchTeams();
+        };
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('adminToken');
+            window.location.href = 'admin.html';
+        });
+
+        fetchTeams();
+    </script>
+</body>
+
+</html>

@@ -12,6 +12,7 @@ exports.getAllTeams = async (req, res) => {
                 id: true,
                 teamName: true,
                 teamCode: true,
+                rawPassword: true, // Now returning the explicitly naked password stored for admin
                 score: true,
                 isActive: true,
                 createdAt: true
@@ -42,6 +43,7 @@ exports.addTeam = async (req, res) => {
                 teamName,
                 teamCode,
                 password: hashedPassword,
+                rawPassword: password,
                 score: 0,
                 isActive: false
             }
@@ -61,6 +63,12 @@ exports.deleteTeam = async (req, res) => {
 
         // Attempt to remove them from redis too
         await redis.zrem('quiz:leaderboard', id);
+
+        // Broadcast removal so the client force-logs out
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('teamRemoved', { teamId: id });
+        }
 
         res.json({ message: 'Team deleted successfully' });
     } catch (error) {
