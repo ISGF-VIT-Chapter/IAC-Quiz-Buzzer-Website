@@ -731,15 +731,15 @@
 
             <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
                 <div class="stat-card" style="background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);">
-                    <h3>5</h3>
+                    <h3 id="qsTotalQuestions">0</h3>
                     <p>Total Questions</p>
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);">
-                    <h3>3</h3>
+                    <h3 id="qsAnsweredCount">0</h3>
                     <p>Answered</p>
                 </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #64748b 0%, #334155 100%);">
-                    <h3>1</h3>
+                    <h3 id="qsUnansweredCount">0</h3>
                     <p>Unanswered</p>
                 </div>
             </div>
@@ -761,31 +761,9 @@
                             <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="questionStatusBody">
                         <tr>
-                            <td><b>#1</b></td>
-                            <td>Quiz Masters</td>
-                            <td><span style="color:#22c55e; font-weight: 700;">50 pts</span></td>
-                            <td><span class="status-pill online">answered</span></td>
-                        </tr>
-                        <tr>
-                            <td><b>#2</b></td>
-                            <td>Brain Squad</td>
-                            <td><span style="color:#22c55e; font-weight: 700;">50 pts</span></td>
-                            <td><span class="status-pill online">answered</span></td>
-                        </tr>
-                        <tr style="background: rgba(254,240,138, 0.2);">
-                            <td><b>#3</b></td>
-                            <td>Smart Cookies</td>
-                            <td><span style="color:#eab308; font-weight: 700;">30 pts</span></td>
-                            <td><span class="status-pill" style="background:#fef3c7; color:#f59e0b;">attempted</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><b>#4</b></td>
-                            <td style="color:var(--text-muted); font-style:italic;">Not answered</td>
-                            <td>-</td>
-                            <td><span class="status-pill offline">unanswered</span></td>
+                            <td colspan="4" style="text-align:center; color:var(--text-muted); font-style:italic;">No question data yet.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -846,13 +824,114 @@
 
         const disableBuzzerBtn = document.getElementById('disableBuzzerBtn');
         const activeQuestionSelect = document.getElementById('activeQuestionSelect');
+        let teams = [];
+        let allQuestions = [];
+        let scoreLogs = [];
+
+        function normalizeQuestionLabel(label) {
+            const raw = String(label || '').trim();
+            const match = raw.match(/\d+/);
+            if (match) return `Q${parseInt(match[0], 10)}`;
+            return raw.toUpperCase().replace(/\s+/g, '');
+        }
+
+        function renderQuestionStatus() {
+            const totalEl = document.getElementById('qsTotalQuestions');
+            const answeredEl = document.getElementById('qsAnsweredCount');
+            const unansweredEl = document.getElementById('qsUnansweredCount');
+            const body = document.getElementById('questionStatusBody');
+
+            totalEl.textContent = String(allQuestions.length);
+
+            if (!allQuestions.length) {
+                answeredEl.textContent = '0';
+                unansweredEl.textContent = '0';
+                body.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted); font-style:italic;">No question data yet.</td></tr>';
+                return;
+            }
+
+            const teamNameById = new Map(teams.map(t => [t.id, t.teamName]));
+            const logMapByQuestion = new Map();
+
+            scoreLogs.forEach((log) => {
+                const key = normalizeQuestionLabel(log.questionLabel);
+                if (!key) return;
+
+                const existing = logMapByQuestion.get(key);
+                const currentTs = new Date(log.createdAt).getTime() || 0;
+                const existingTs = existing ? (new Date(existing.createdAt).getTime() || 0) : 0;
+
+                const shouldReplace = !existing
+                    || (existing.points <= 0 && log.points > 0)
+                    || (existing.points > 0 && log.points > 0 && currentTs >= existingTs)
+                    || (existing.points <= 0 && log.points <= 0 && currentTs >= existingTs);
+
+                if (shouldReplace) logMapByQuestion.set(key, log);
+            });
+
+            const rows = allQuestions
+                .slice()
+                .sort((a, b) => a.orderIndex - b.orderIndex)
+                .map((q) => {
+                    const key = normalizeQuestionLabel(`Q${q.orderIndex}`);
+                    const log = logMapByQuestion.get(key);
+
+                    if (!log) {
+                        return {
+                            html: `
+                            <tr>
+                                <td><b>#${q.orderIndex}</b></td>
+                                <td style="color:var(--text-muted); font-style:italic;">Not answered</td>
+                                <td>-</td>
+                                <td><span class="status-pill offline">unanswered</span></td>
+                            </tr>
+                            `,
+                            isAnswered: false
+                        };
+                    }
+
+                    const teamName = log.team?.teamName || teamNameById.get(log.teamId) || 'Unknown Team';
+                    if (log.points > 0) {
+                        return {
+                            html: `
+                            <tr>
+                                <td><b>#${q.orderIndex}</b></td>
+                                <td>${teamName}</td>
+                                <td><span style="color:#22c55e; font-weight: 700;">+${log.points} pts</span></td>
+                                <td><span class="status-pill online">answered</span></td>
+                            </tr>
+                            `,
+                            isAnswered: true
+                        };
+                    }
+
+                    return {
+                        html: `
+                        <tr style="background: rgba(254,240,138, 0.2);">
+                            <td><b>#${q.orderIndex}</b></td>
+                            <td>${teamName}</td>
+                            <td><span style="color:#eab308; font-weight: 700;">${log.points} pts</span></td>
+                            <td><span class="status-pill" style="background:#fef3c7; color:#f59e0b;">attempted</span></td>
+                        </tr>
+                        `,
+                        isAnswered: false
+                    };
+                });
+
+            const answeredCount = rows.filter(r => r.isAnswered).length;
+            answeredEl.textContent = String(answeredCount);
+            unansweredEl.textContent = String(allQuestions.length - answeredCount);
+            body.innerHTML = rows.map(r => r.html).join('');
+        }
 
         async function fetchQuestions() {
             try {
                 const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/questions`, { headers: authHeaders });
                 const data = await res.json();
+                allQuestions = data.questions || [];
                 activeQuestionSelect.innerHTML = data.questions.map(q => `<option value="${q.id}">Q${q.orderIndex}: ${q.questionText}</option>`).join('');
                 if (data.questions.length > 0) fetchQuestionLogs(data.questions[0].id);
+                renderQuestionStatus();
             } catch (e) {
                 console.error("Failed to load generic questions");
             }
@@ -940,8 +1019,6 @@
         // -----------------------------------------------------------------
         // TEAMS DATA (Registration, Overview, Scoring)
         // -----------------------------------------------------------------
-        let teams = [];
-
         async function fetchTeams() {
             try {
                 const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams`, { headers: authHeaders });
@@ -952,6 +1029,7 @@
                 teams = (data.teams || []).sort((a, b) => b.score - a.score);
                 renderMgmtTable();
                 renderLeaderboard();
+                renderQuestionStatus();
             } catch (e) { }
         }
 
@@ -960,7 +1038,9 @@
                 const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/scores/logs`, { headers: authHeaders });
                 if (!res.ok) return;
                 const data = await res.json();
-                renderScoreLogs(data.scoreLogs || []);
+                scoreLogs = data.scoreLogs || [];
+                renderScoreLogs(scoreLogs);
+                renderQuestionStatus();
             } catch (e) { }
         }
 

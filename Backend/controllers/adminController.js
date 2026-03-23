@@ -3,6 +3,16 @@ const prisma = require('../config/db');
 const redis = require('../config/redis');
 const bcrypt = require('bcryptjs');
 
+const REDIS_SCORE_LOG_KEY = 'quiz:scorelogs';
+const getTeamAnsweredSetKey = (teamId) => `quiz:team:${teamId}:answeredQuestions`;
+
+const normalizeQuestionLabel = (label) => {
+    const raw = String(label || '').trim();
+    const match = raw.match(/\d+/);
+    if (match) return `Q${parseInt(match[0], 10)}`;
+    return raw.toUpperCase().replace(/\s+/g, '');
+};
+
 const isMissingScoreLogTableError = (error) => {
     if (!error) return false;
     // Prisma P2021 = table does not exist.
@@ -11,11 +21,32 @@ const isMissingScoreLogTableError = (error) => {
     return msg.includes('scorelog') && msg.includes('does not exist');
 };
 
+const buildUniquePositiveQuestionCountMapFromRedis = async (teamIds) => {
+    if (!teamIds || teamIds.length === 0) return {};
+
+    const pipeline = redis.pipeline();
+    teamIds.forEach((teamId) => {
+        pipeline.scard(getTeamAnsweredSetKey(teamId));
+    });
+
+    const results = await pipeline.exec();
+    const counts = {};
+
+    teamIds.forEach((teamId, idx) => {
+        const pair = results[idx] || [];
+        const err = pair[0];
+        const value = pair[1];
+        counts[teamId] = err ? 0 : Number(value || 0);
+    });
+
+    return counts;
+};
+
 const buildUniquePositiveQuestionCountMap = async (teamIds) => {
     if (!teamIds || teamIds.length === 0) return {};
 
     try {
-        const uniquePositiveLogs = await prisma.scoreLog.findMany({
+        const positiveLogs = await prisma.scoreLog.findMany({
             where: {
                 teamId: { in: teamIds },
                 points: { gt: 0 }
@@ -23,18 +54,27 @@ const buildUniquePositiveQuestionCountMap = async (teamIds) => {
             select: {
                 teamId: true,
                 questionLabel: true
-            },
-            distinct: ['teamId', 'questionLabel']
+            }
         });
 
-        return uniquePositiveLogs.reduce((acc, log) => {
-            acc[log.teamId] = (acc[log.teamId] || 0) + 1;
-            return acc;
-        }, {});
+        const teamQuestionSets = {};
+        positiveLogs.forEach((log) => {
+            const normalized = normalizeQuestionLabel(log.questionLabel);
+            if (!normalized) return;
+            if (!teamQuestionSets[log.teamId]) {
+                teamQuestionSets[log.teamId] = new Set();
+            }
+            teamQuestionSets[log.teamId].add(normalized);
+        });
+
+        const counts = {};
+        teamIds.forEach((teamId) => {
+            counts[teamId] = teamQuestionSets[teamId] ? teamQuestionSets[teamId].size : 0;
+        });
+        return counts;
     } catch (error) {
         if (isMissingScoreLogTableError(error)) {
-            console.warn('ScoreLog table missing. uniqueQuestionsAnswered defaults to 0 until migration is applied.');
-            return {};
+            return buildUniquePositiveQuestionCountMapFromRedis(teamIds);
         }
         throw error;
     }
@@ -141,7 +181,25 @@ exports.addScore = async (req, res) => {
                 }
             });
 
-            txResult = { createdLog: null, updatedTeam };
+            const fallbackLog = {
+                id: `redis-${Date.now()}`,
+                teamId,
+                questionLabel: cleanedQuestionLabel,
+                points: parsedPoints,
+                createdAt: new Date().toISOString(),
+                team: {
+                    teamName: updatedTeam.teamName
+                }
+            };
+
+            await redis.lpush(REDIS_SCORE_LOG_KEY, JSON.stringify(fallbackLog));
+            await redis.ltrim(REDIS_SCORE_LOG_KEY, 0, 199);
+
+            if (parsedPoints > 0) {
+                await redis.sadd(getTeamAnsweredSetKey(teamId), normalizeQuestionLabel(cleanedQuestionLabel));
+            }
+
+            txResult = { createdLog: fallbackLog, updatedTeam };
         }
 
         const uniqueCountsByTeamId = await buildUniquePositiveQuestionCountMap([teamId]);
@@ -189,7 +247,18 @@ exports.getScoreLogs = async (req, res) => {
         res.json({ scoreLogs });
     } catch (error) {
         if (isMissingScoreLogTableError(error)) {
-            return res.json({ scoreLogs: [] });
+            const fallbackLogsRaw = await redis.lrange(REDIS_SCORE_LOG_KEY, 0, 199);
+            const fallbackLogs = fallbackLogsRaw
+                .map((entry) => {
+                    try {
+                        return JSON.parse(entry);
+                    } catch (_) {
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+
+            return res.json({ scoreLogs: fallbackLogs });
         }
         console.error('Get score logs error:', error);
         res.status(500).json({ message: 'Error fetching score logs' });
@@ -234,6 +303,7 @@ exports.deleteTeam = async (req, res) => {
 
         // Attempt to remove them from redis too
         await redis.zrem('quiz:leaderboard', id);
+        await redis.del(getTeamAnsweredSetKey(id));
 
         // Broadcast removal so the client force-logs out
         const io = req.app.get('io');
