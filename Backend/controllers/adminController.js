@@ -3,6 +3,27 @@ const prisma = require('../config/db');
 const redis = require('../config/redis');
 const bcrypt = require('bcryptjs');
 
+const buildUniquePositiveQuestionCountMap = async (teamIds) => {
+    if (!teamIds || teamIds.length === 0) return {};
+
+    const uniquePositiveLogs = await prisma.scoreLog.findMany({
+        where: {
+            teamId: { in: teamIds },
+            points: { gt: 0 }
+        },
+        select: {
+            teamId: true,
+            questionLabel: true
+        },
+        distinct: ['teamId', 'questionLabel']
+    });
+
+    return uniquePositiveLogs.reduce((acc, log) => {
+        acc[log.teamId] = (acc[log.teamId] || 0) + 1;
+        return acc;
+    }, {});
+};
+
 // --- Team Management ---
 
 exports.getAllTeams = async (req, res) => {
@@ -19,9 +40,117 @@ exports.getAllTeams = async (req, res) => {
             },
             orderBy: { createdAt: 'desc' }
         });
-        res.json({ teams });
+
+        const uniqueCountsByTeamId = await buildUniquePositiveQuestionCountMap(teams.map(t => t.id));
+        const teamsWithStats = teams.map(t => ({
+            ...t,
+            uniqueQuestionsAnswered: uniqueCountsByTeamId[t.id] || 0
+        }));
+
+        res.json({ teams: teamsWithStats });
     } catch (error) {
         res.status(500).json({ message: 'Error fetching teams' });
+    }
+};
+
+exports.addScore = async (req, res) => {
+    try {
+        const { teamId, questionLabel, points } = req.body;
+
+        if (!teamId || !questionLabel || points === undefined || points === null) {
+            return res.status(400).json({ message: 'teamId, questionLabel and points are required' });
+        }
+
+        const parsedPoints = Number(points);
+        if (!Number.isFinite(parsedPoints) || !Number.isInteger(parsedPoints)) {
+            return res.status(400).json({ message: 'points must be an integer value' });
+        }
+
+        const cleanedQuestionLabel = String(questionLabel).trim();
+        if (!cleanedQuestionLabel) {
+            return res.status(400).json({ message: 'questionLabel cannot be empty' });
+        }
+
+        const txResult = await prisma.$transaction(async (tx) => {
+            const createdLog = await tx.scoreLog.create({
+                data: {
+                    teamId,
+                    questionLabel: cleanedQuestionLabel,
+                    points: parsedPoints
+                },
+                include: {
+                    team: {
+                        select: {
+                            teamName: true
+                        }
+                    }
+                }
+            });
+
+            const updatedTeam = await tx.team.update({
+                where: { id: teamId },
+                data: {
+                    score: {
+                        increment: parsedPoints
+                    }
+                },
+                select: {
+                    id: true,
+                    teamName: true,
+                    score: true,
+                    isActive: true
+                }
+            });
+
+            return { createdLog, updatedTeam };
+        });
+
+        const uniqueCountsByTeamId = await buildUniquePositiveQuestionCountMap([teamId]);
+        const uniqueQuestionsAnswered = uniqueCountsByTeamId[teamId] || 0;
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('scoreUpdated', {
+                teamId,
+                score: txResult.updatedTeam.score,
+                uniqueQuestionsAnswered
+            });
+        }
+
+        res.status(201).json({
+            message: 'Score recorded successfully',
+            scoreLog: txResult.createdLog,
+            team: {
+                ...txResult.updatedTeam,
+                uniqueQuestionsAnswered
+            }
+        });
+    } catch (error) {
+        console.error('Add score error:', error);
+        res.status(500).json({ message: 'Error recording score' });
+    }
+};
+
+exports.getScoreLogs = async (req, res) => {
+    try {
+        const scoreLogs = await prisma.scoreLog.findMany({
+            include: {
+                team: {
+                    select: {
+                        teamName: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            take: 200
+        });
+
+        res.json({ scoreLogs });
+    } catch (error) {
+        console.error('Get score logs error:', error);
+        res.status(500).json({ message: 'Error fetching score logs' });
     }
 };
 

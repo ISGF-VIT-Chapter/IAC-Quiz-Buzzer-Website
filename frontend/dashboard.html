@@ -819,6 +819,10 @@
         const socket = io(window.APP_CONFIG.backendUrl);
         socket.on('connect', () => socket.emit('joinAdmin'));
         socket.on('teamStatusChanged', () => fetchTeams());
+        socket.on('scoreUpdated', () => {
+            fetchTeams();
+            fetchScoreLogs();
+        });
 
         const armBtn = document.getElementById('armBuzzerBtn');
         const resetBtn = document.getElementById('resetRoundBtn');
@@ -951,6 +955,43 @@
             } catch (e) { }
         }
 
+        async function fetchScoreLogs() {
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/scores/logs`, { headers: authHeaders });
+                if (!res.ok) return;
+                const data = await res.json();
+                renderScoreLogs(data.scoreLogs || []);
+            } catch (e) { }
+        }
+
+        function renderScoreLogs(logs) {
+            const scoreLogBody = document.getElementById('scoreLogBody');
+
+            if (!logs.length) {
+                scoreLogBody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align:center; color:var(--text-muted); font-style:italic;">Log is manually maintained for this round. No entries yet.</td>
+                </tr>
+                `;
+                return;
+            }
+
+            scoreLogBody.innerHTML = logs.map(log => {
+                const ptsStr = log.points > 0 ? `+${log.points} pts` : `${log.points} pts`;
+                const colorClass = log.points > 0 ? 'online' : 'offline';
+                const timeLabel = new Date(log.createdAt).toLocaleTimeString([], { hour12: false });
+
+                return `
+                <tr>
+                    <td style="font-weight:800;">${log.team?.teamName || 'Unknown Team'}</td>
+                    <td>${log.questionLabel}</td>
+                    <td><span class="status-pill ${colorClass}">${ptsStr}</span></td>
+                    <td>${timeLabel}</td>
+                </tr>
+                `;
+            }).join('');
+        }
+
         function renderMgmtTable() {
             const tbody = document.getElementById('mgmtTableBody');
             const select = document.getElementById('scoreTeamSelect');
@@ -1025,7 +1066,7 @@
             <td style="font-weight: 800; font-size: 1.1rem;">${rankHtml}</td>
             <td><div style="font-weight: 800; font-size: 1.1rem;">${t.teamName}</div></td>
             <td><span class="points-badge">${t.score} pts</span></td>
-            <td>0</td>
+                        <td>${t.uniqueQuestionsAnswered || 0}</td>
             <td><span class="status-pill ${t.isActive ? 'online' : 'offline'}"><span class="material-symbols-rounded" style="font-size:14px;">${t.isActive ? 'wifi' : 'wifi_off'}</span> ${t.isActive ? 'Online' : 'Offline'}</span></td>
           </tr>
         `;
@@ -1066,31 +1107,50 @@
             } catch (err) { }
         });
 
-        // Score Submit mock
-        document.getElementById('submitScoreBtn').addEventListener('click', () => {
-            let teamSelect = document.getElementById('scoreTeamSelect');
-            let amt = document.getElementById('scoreAmount').value;
-            let qNum = document.getElementById('scoreQNum').value;
-            if (!teamSelect.value || !amt) { window.APP_CONFIG.showToast('Select team and amount', 'error'); return; }
+        // Score submit (persisted)
+        document.getElementById('submitScoreBtn').addEventListener('click', async () => {
+            const teamSelect = document.getElementById('scoreTeamSelect');
+            const amtRaw = document.getElementById('scoreAmount').value;
+            const qNumRaw = document.getElementById('scoreQNum').value;
 
-            // Push mock to table
-            let teamName = teamSelect.options[teamSelect.selectedIndex].text;
-            let timeLabel = new Date().toTimeString().substring(0, 8);
-            let ptsStr = parseInt(amt) > 0 ? `+${amt} pts` : `${amt} pts`;
-            let colorClass = parseInt(amt) > 0 ? 'online' : 'offline';
+            if (!teamSelect.value || !amtRaw || !qNumRaw.trim()) {
+                window.APP_CONFIG.showToast('Select team, question number, and amount', 'error');
+                return;
+            }
 
-            document.getElementById('scoreLogBody').innerHTML = `
-          <tr>
-            <td style="font-weight:800;">${teamName}</td>
-            <td>${qNum}</td>
-            <td><span class="status-pill ${colorClass}">${ptsStr}</span></td>
-            <td>${timeLabel}</td>
-          </tr>
-        ` + (document.getElementById('scoreLogBody').innerHTML.includes('No entries') ? '' : document.getElementById('scoreLogBody').innerHTML);
+            const parsedPoints = Number(amtRaw);
+            if (!Number.isInteger(parsedPoints)) {
+                window.APP_CONFIG.showToast('Points must be a whole number', 'error');
+                return;
+            }
 
-            // Actual db update requires backend score update route. For now, we mock the UI update.
-            window.APP_CONFIG.showToast('Score recorded.', 'success');
-            document.getElementById('scoreAmount').value = '';
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/scores`, {
+                    method: 'POST',
+                    headers: authHeaders,
+                    body: JSON.stringify({
+                        teamId: teamSelect.value,
+                        questionLabel: qNumRaw.trim(),
+                        points: parsedPoints
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    window.APP_CONFIG.showToast(err.message || 'Failed to record score', 'error');
+                    return;
+                }
+
+                document.getElementById('scoreAmount').value = '';
+                document.getElementById('scoreQNum').value = '';
+                window.APP_CONFIG.showToast('Score recorded.', 'success');
+
+                // Immediate refresh for the current admin view.
+                fetchTeams();
+                fetchScoreLogs();
+            } catch (e) {
+                window.APP_CONFIG.showToast('Failed to record score', 'error');
+            }
         });
 
         window.deleteTeam = async (id) => {
@@ -1105,6 +1165,7 @@
         });
 
         fetchTeams();
+        fetchScoreLogs();
     </script>
 </body>
 

@@ -29,6 +29,7 @@ model Team {
   updatedAt DateTime @updatedAt
 
   buzzes BuzzHistory[]
+  scoreLogs ScoreLog[]
 }
 
 model Question {
@@ -58,4 +59,16 @@ model BuzzHistory {
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([questionId, buzzTimeMs])
+}
+
+model ScoreLog {
+  id            String   @id @default(cuid())
+  teamId        String
+  questionLabel String   // e.g. "Q1", "Q5" — admin-entered label
+  points        Int      // positive = award, negative = deduction
+  createdAt     DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
 }
