@@ -13,8 +13,9 @@ const server = http.createServer(app);
 // Socket.io initialization with CORS
 const io = new Server(server, {
     cors: {
-        origin: '*', // We can lock this down in production
-        methods: ['GET', 'POST']
+        origin: '*',
+        methods: ['GET', 'POST'],
+        credentials: true
     }
 });
 
@@ -22,7 +23,18 @@ const io = new Server(server, {
 app.set('io', io);
 
 // Middleware
-app.use(cors());
+
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false
+}));
+
+
+
+
+
 app.use(express.json());
 
 // Basic logging middleware
