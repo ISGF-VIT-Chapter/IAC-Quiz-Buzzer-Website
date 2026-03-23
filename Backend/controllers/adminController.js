@@ -97,3 +97,26 @@ exports.toggleTeamStatus = async (req, res) => {
         res.status(500).json({ message: 'Error updating team status' });
     }
 };
+
+exports.forceLogoutTeam = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const team = await prisma.team.update({
+            where: { id },
+            data: { isActive: false }
+        });
+
+        const io = req.app.get('io');
+        if (io) {
+            // Signal the specific team's broadcast group to forcefully evict their browser
+            io.to(`team_${id}`).emit('teamLoggedOut', { message: 'Admin forced logout' });
+            // Alert admin dashboard to flip icon
+            io.emit('teamStatusChanged', { teamId: id, isActive: false });
+        }
+
+        res.json({ message: 'Team successfully logged out', team });
+    } catch (error) {
+        console.error("Force Logout Error:", error);
+        res.status(500).json({ message: 'Error forcibly logging out team' });
+    }
+};

@@ -977,11 +977,32 @@
             <td><span style="font-family: monospace; letter-spacing: 1px;">${t.rawPassword || '***'}</span></td>
             <td><span class="status-pill ${t.isActive ? 'online' : 'offline'}"><span class="material-symbols-rounded" style="font-size:14px;">${t.isActive ? 'wifi' : 'wifi_off'}</span> ${t.isActive ? 'Online' : 'Offline'}</span></td>
             <td><span class="status-pill blue">active</span></td>
-            <td><button class="remove-btn" onclick="deleteTeam('${t.id}')"><span class="material-symbols-rounded">delete</span> Remove</button></td>
+            <td>
+              <button class="btn-primary" style="background:#f59e0b; padding:0.4rem 1rem; font-size:0.85rem; margin-right:4px;" onclick="forceLogout('${t.id}')"><span class="material-symbols-rounded" style="font-size:16px; transform:translateY(3px);">logout</span> Log Out</button>
+              <button class="remove-btn" onclick="deleteTeam('${t.id}')"><span class="material-symbols-rounded">delete</span> Remove</button>
+            </td>
           </tr>
         `;
                 select.innerHTML += `<option value="${t.id}">${t.teamName}</option>`;
             });
+        }
+
+        async function forceLogout(id) {
+            if (!confirm('Force logout this team from all devices?')) return;
+            try {
+                const res = await fetch(`${window.APP_CONFIG.backendUrl}/api/admin/teams/${id}/logout`, {
+                    method: 'POST',
+                    headers: authHeaders
+                });
+                if (res.ok) {
+                    window.APP_CONFIG.showToast('Team logged out forcefully', 'success');
+                    fetchTeams();
+                } else {
+                    window.APP_CONFIG.showToast('Failed to logout team', 'error');
+                }
+            } catch (err) {
+                window.APP_CONFIG.showToast('Auth error', 'error');
+            }
         }
 
         function renderLeaderboard() {

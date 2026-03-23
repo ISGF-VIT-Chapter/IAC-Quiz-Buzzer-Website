@@ -464,6 +464,12 @@
             }
         });
 
+        socket.on('teamLoggedOut', () => {
+            // Admin gracefully forced this session offline
+            localStorage.clear();
+            window.location.href = 'index.html?logout=1';
+        });
+
         // ARMED
         socket.on('buzzerEnabled', (data) => {
             window.myBuzzData = null; // Clear previous buzz data for new round

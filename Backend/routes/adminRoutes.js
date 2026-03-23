@@ -15,6 +15,7 @@ router.get('/teams', protectAdmin, adminController.getAllTeams);
 router.post('/teams', protectAdmin, adminController.addTeam);
 router.delete('/teams/:id', protectAdmin, adminController.deleteTeam);
 router.put('/teams/:id/status', protectAdmin, adminController.toggleTeamStatus);
+router.post('/teams/:id/logout', protectAdmin, adminController.forceLogoutTeam);
 
 // Quiz & Buzzer (Protected)
 router.get('/questions', protectAdmin, quizController.getQuestions);

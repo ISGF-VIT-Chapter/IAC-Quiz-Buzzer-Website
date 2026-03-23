@@ -52,14 +52,20 @@ app.get('/', (req, res) => {
 });
 
 // --- Socket.IO Real-time Logic --- //
+const prisma = require('./config/db');
+
 io.on('connection', (socket) => {
     console.log(`🔌 New client connected: ${socket.id}`);
 
     // When a team logs in, they should join their specific room and the 'teams' broadcast room
-    socket.on('joinTeam', (teamId) => {
+    socket.on('joinTeam', async (teamId) => {
         socket.join(`team_${teamId}`);
         socket.join('teams'); // broadcast room for all teams
+        socket.teamId = teamId; // attach to memory for disconnect cleanup
         console.log(`🏠 Socket ${socket.id} joined team cell: ${teamId}`);
+        try {
+            await prisma.team.update({ where: { id: teamId }, data: { isActive: true } });
+        } catch (e) { } // Ignore if already true
     });
 
     // When admin logs in, they join the admin room
@@ -69,8 +75,19 @@ io.on('connection', (socket) => {
     });
 
     // Handle explicit disconnect from the frontend
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log(`🔌 Client disconnected: ${socket.id}`);
+        if (socket.teamId) {
+            try {
+                await prisma.team.update({
+                    where: { id: socket.teamId },
+                    data: { isActive: false }
+                });
+                console.log(`🔓 Team ${socket.teamId} auto-logged out!`);
+            } catch (err) {
+                console.error("Disconnect cleanup error", err);
+            }
+        }
     });
 });
 
