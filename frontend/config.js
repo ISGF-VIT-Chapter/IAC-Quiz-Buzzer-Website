@@ -4,7 +4,7 @@
 window.APP_CONFIG = {
     // If running locally, this will be localhost:5000.
     // In production (Railway), change this to your deployed backend URL.
-    backendUrl: 'http://localhost:5000',
+    backendUrl: 'https://iac-quiz-buzzer-website-production.up.railway.app',
 
     // Utility to show beautiful, simple toast notifications
     showToast: (message, type = 'info') => {
