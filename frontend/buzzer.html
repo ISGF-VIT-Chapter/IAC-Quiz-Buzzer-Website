@@ -399,8 +399,8 @@
         // -------------------------------------------------------------
         // INITIALIZATION & AUTH CHECK
         // -------------------------------------------------------------
-        const token = localStorage.getItem('teamToken');
-        const teamDataRaw = localStorage.getItem('team');
+        const token = sessionStorage.getItem('teamToken');
+        const teamDataRaw = sessionStorage.getItem('team');
         if (!token || !teamDataRaw) {
             window.location.href = 'index.html';
         }
@@ -445,7 +445,7 @@
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
                 });
             } catch (err) { }
-            localStorage.clear();
+            sessionStorage.clear();
             window.location.href = 'index.html';
         });
 
@@ -459,14 +459,14 @@
         // FORCE LOGOUT IF KICKED BY ADMIN
         socket.on('teamRemoved', (data) => {
             if (data.teamId === teamData.id) {
-                localStorage.clear();
+                sessionStorage.clear();
                 window.location.href = 'index.html?kicked=1';
             }
         });
 
         socket.on('teamLoggedOut', () => {
             // Admin gracefully forced this session offline
-            localStorage.clear();
+            sessionStorage.clear();
             window.location.href = 'index.html?logout=1';
         });
 

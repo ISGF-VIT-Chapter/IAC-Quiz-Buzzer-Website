@@ -377,8 +377,8 @@
 
                 if (response.ok) {
                     // Store token but don't redirect until rules accepted
-                    localStorage.setItem('tempToken', data.token);
-                    localStorage.setItem('tempTeam', JSON.stringify(data.team));
+                    sessionStorage.setItem('tempToken', data.token);
+                    sessionStorage.setItem('tempTeam', JSON.stringify(data.team));
 
                     window.APP_CONFIG.showToast('Credentials accepted!', 'success');
 
@@ -415,10 +415,10 @@
         // Final Proceed to Buzzer
         proceedBtn.addEventListener('click', () => {
             // Move from temp to actual auth storage
-            localStorage.setItem('teamToken', localStorage.getItem('tempToken'));
-            localStorage.setItem('team', localStorage.getItem('tempTeam'));
-            localStorage.removeItem('tempToken');
-            localStorage.removeItem('tempTeam');
+            sessionStorage.setItem('teamToken', sessionStorage.getItem('tempToken'));
+            sessionStorage.setItem('team', sessionStorage.getItem('tempTeam'));
+            sessionStorage.removeItem('tempToken');
+            sessionStorage.removeItem('tempTeam');
 
             window.location.href = 'buzzer.html';
         });
@@ -428,7 +428,9 @@
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('kicked') === '1') {
                 setTimeout(() => window.APP_CONFIG.showToast('You were removed from the arena by the admin.', 'error'), 500);
-            } else if (localStorage.getItem('teamToken')) {
+            } else if (urlParams.get('logout') === '1') {
+                setTimeout(() => window.APP_CONFIG.showToast('Your session was forcibly closed by an Admin.', 'info'), 500);
+            } else if (sessionStorage.getItem('teamToken')) {
                 window.location.href = 'buzzer.html';
             }
         });
