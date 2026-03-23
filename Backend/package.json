@@ -5,6 +5,7 @@
     "main": "server.js",
     "type": "commonjs",
     "scripts": {
+        "build": "npx prisma generate",
         "start": "node server.js",
         "dev": "nodemon server.js",
         "db:generate": "npx prisma generate",
